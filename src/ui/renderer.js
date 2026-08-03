@@ -52,7 +52,13 @@ function openConfigPopover(name, anchorBtn) {
   const pop = document.createElement('div');
   pop.className = 'config-popover';
   pop.innerHTML = `
-    <label>Color <input type="color" id="cfg-color" value="${config.color}"></label>
+    <label>Color
+      <div class="color-row">
+        <input type="color" id="cfg-color" value="${config.color}">
+        <button id="cfg-color-confirm" type="button">✓ Usar este color</button>
+        <span id="cfg-color-confirmed" class="color-confirmed" style="display:none;">Aplicado ✓</span>
+      </div>
+    </label>
     <label>Volumen <input type="range" id="cfg-volume" min="0" max="1" step="0.05" value="${config.volume}"></label>
     <label>Atajo
       <input type="text" id="cfg-hotkey" value="${config.hotkey}" placeholder="Clic y presioná una tecla" readonly>
@@ -71,6 +77,19 @@ function openConfigPopover(name, anchorBtn) {
   const rect = anchorBtn.getBoundingClientRect();
   pop.style.top = `${rect.bottom + window.scrollY + 6}px`;
   pop.style.left = `${rect.left + window.scrollX}px`;
+
+  const colorInput = pop.querySelector('#cfg-color');
+  const colorConfirmedLabel = pop.querySelector('#cfg-color-confirmed');
+
+  pop.querySelector('#cfg-color-confirm').addEventListener('click', () => {
+    // No hace nada "mágico": el valor del color ya está tomado en
+    // colorInput.value en todo momento. Esto solo le da al usuario una
+    // confirmación visual clara de que puede pasar a "Guardar" sin
+    // preocuparse por el selector nativo de color.
+    colorInput.blur();
+    colorConfirmedLabel.style.display = 'inline';
+    setTimeout(() => { colorConfirmedLabel.style.display = 'none'; }, 1500);
+  });
 
   const hotkeyInput = pop.querySelector('#cfg-hotkey');
   let capturedHotkey = config.hotkey;
@@ -179,6 +198,13 @@ async function loadSounds() {
     gear.addEventListener('click', (e) => {
       e.stopPropagation();
       openConfigPopover(sound.name, gear);
+    });
+
+    // Clic derecho sobre el botón también abre la configuración,
+    // como acceso rápido sin tener que apuntarle al ⚙.
+    btn.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      openConfigPopover(sound.name, btn);
     });
 
     applyButtonStyle(sound.name);

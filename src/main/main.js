@@ -118,8 +118,8 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, '..', 'ui', 'index.html'));
 
-  // Temporal: abrimos las DevTools para diagnosticar el problema de audio.
-  mainWindow.webContents.openDevTools();
+  // Descomentar solo si necesitamos volver a diagnosticar algo:
+  // mainWindow.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
