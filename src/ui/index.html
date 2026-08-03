@@ -9,10 +9,19 @@
   <header>
     <h1>🎵 SoundBoard Virtual</h1>
     <div class="header-actions">
+      <select id="output-device-select" title="Dispositivo de salida de audio"></select>
       <button id="stop-all-btn" title="Detener todos los sonidos">⏹ Detener todo</button>
       <span id="version"></span>
     </div>
   </header>
+
+  <div id="vbcable-banner" class="vbcable-banner" style="display:none;">
+    <span id="vbcable-text"></span>
+    <div class="vbcable-actions">
+      <button id="vbcable-download-btn" style="display:none;">Descargar VB-CABLE</button>
+      <button id="vbcable-recheck-btn">Volver a comprobar</button>
+    </div>
+  </div>
 
   <main>
     <p id="empty-msg">No se encontraron sonidos en <code>assets/sounds</code>. Agregá archivos .mp3, .wav, .ogg o .flac ahí y reiniciá la app.</p>

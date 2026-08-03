@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { exec } = require('child_process');
 const Store = require('electron-store');
 
 const SOUNDS_DIR = path.join(__dirname, '..', '..', 'assets', 'sounds');
@@ -27,10 +28,52 @@ function defaultConfig() {
   return { color: '#2d2d30', volume: 1, hotkey: '', loop: false };
 }
 
+// Consulta los dispositivos de audio de Windows vía PowerShell y busca
+// si alguno corresponde a VB-CABLE (aparece como "CABLE Input" o
+// contiene "VB-Audio" en el nombre).
+function checkVBCable() {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32') {
+      resolve({ supported: false, installed: false });
+      return;
+    }
+
+    exec(
+      'powershell -NoProfile -Command "Get-CimInstance Win32_SoundDevice | Select-Object -ExpandProperty Name"',
+      { timeout: 8000 },
+      (err, stdout) => {
+        if (err) {
+          resolve({ supported: true, installed: false, error: true });
+          return;
+        }
+        const installed = /cable|vb-audio/i.test(stdout);
+        resolve({ supported: true, installed });
+      }
+    );
+  });
+}
+
+ipcMain.handle('vbcable:check', () => checkVBCable());
+ipcMain.handle('vbcable:open-download-page', () => {
+  shell.openExternal('https://vb-audio.com/Cable/');
+});
+
+// Configuración general de la app (no por sonido), como el dispositivo
+// de salida elegido para reproducir los efectos.
+ipcMain.handle('settings:get-output-device', () => store.get('outputDeviceId', ''));
+ipcMain.handle('settings:save-output-device', (event, deviceId) => {
+  store.set('outputDeviceId', deviceId);
+  return true;
+});
+
 // Vuelve a registrar todos los atajos globales según la configuración
 // guardada. Se llama al arrancar y cada vez que se guarda una config nueva.
+// Devuelve un mapa { nombreSonido: true/false } indicando si cada atajo
+// configurado quedó realmente registrado (puede fallar si otra app ya
+// usa esa combinación).
 function registerHotkeys() {
   globalShortcut.unregisterAll();
+  const results = {};
 
   listSoundFiles().forEach((sound) => {
     const config = store.get(sound.name, defaultConfig());
@@ -40,18 +83,23 @@ function registerHotkeys() {
       globalShortcut.register(config.hotkey, () => {
         if (mainWindow) mainWindow.webContents.send('hotkey:trigger', sound.name);
       });
+      results[sound.name] = globalShortcut.isRegistered(config.hotkey);
     } catch (err) {
-      console.error(`No se pudo registrar el atajo "${config.hotkey}" para "${sound.name}":`, err);
+      results[sound.name] = false;
     }
   });
+
+  return results;
 }
 
 ipcMain.handle('sounds:list', () => listSoundFiles());
 ipcMain.handle('config:get', (event, name) => store.get(name, defaultConfig()));
 ipcMain.handle('config:save', (event, name, config) => {
   store.set(name, config);
-  registerHotkeys();
-  return true;
+  const results = registerHotkeys();
+  // Si no pusieron atajo, consideramos "registrado" (no aplica).
+  const hotkeyOk = config.hotkey ? !!results[name] : true;
+  return { ok: true, hotkeyRegistered: hotkeyOk };
 });
 
 function createWindow() {
@@ -69,9 +117,21 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, '..', 'ui', 'index.html'));
+
+  // Temporal: abrimos las DevTools para diagnosticar el problema de audio.
+  mainWindow.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
+  // Autoconcedemos el permiso de "media" para que el renderer pueda ver
+  // los nombres reales de los dispositivos de audio (sin esto, Chromium
+  // los devuelve con nombres genéricos por privacidad). No grabamos nada,
+  // solo lo usamos para listar dispositivos de salida.
+  const { session } = require('electron');
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    callback(permission === 'media');
+  });
+
   createWindow();
   registerHotkeys();
 });

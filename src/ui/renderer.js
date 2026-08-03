@@ -57,6 +57,8 @@ function openConfigPopover(name, anchorBtn) {
     <label>Atajo
       <input type="text" id="cfg-hotkey" value="${config.hotkey}" placeholder="Clic y presioná una tecla" readonly>
     </label>
+    <p class="hotkey-hint">Sugerencia: Ctrl+Alt+Shift+Tecla casi nunca choca con otras apps.</p>
+    <p class="hotkey-warning" id="cfg-hotkey-warning" style="display:none;">⚠ Ese atajo ya está en uso por otra app, probá otra combinación.</p>
     <label><input type="checkbox" id="cfg-loop" ${config.loop ? 'checked' : ''}> Repetir en bucle</label>
     <div class="popover-actions">
       <button id="cfg-clear-hotkey" type="button">Quitar atajo</button>
@@ -97,10 +99,18 @@ function openConfigPopover(name, anchorBtn) {
       hotkey: capturedHotkey,
       loop: pop.querySelector('#cfg-loop').checked
     };
-    await window.sb.saveConfig(name, newConfig);
+    const result = await window.sb.saveConfig(name, newConfig);
     entry.config = newConfig;
     applyButtonStyle(name);
-    closePopover();
+
+    const warning = pop.querySelector('#cfg-hotkey-warning');
+    if (result && result.hotkeyRegistered === false) {
+      // El atajo quedó guardado pero no se pudo activar globalmente:
+      // avisamos y dejamos el panel abierto para que prueben otra combinación.
+      warning.style.display = 'block';
+    } else {
+      closePopover();
+    }
   });
 
   openPopover = pop;
@@ -129,6 +139,7 @@ async function loadSounds() {
   for (const sound of soundFiles) {
     const config = await window.sb.getConfig(sound.name);
     const audio = new Audio(sound.path);
+    applyOutputDevice(audio);
 
     const wrapper = document.createElement('div');
     wrapper.className = 'sound-btn-wrapper';
@@ -187,3 +198,107 @@ window.sb.onHotkeyTrigger((name) => {
 });
 
 loadSounds();
+
+// --- Estado del micrófono virtual (VB-CABLE) ---
+const vbBanner = document.getElementById('vbcable-banner');
+const vbText = document.getElementById('vbcable-text');
+const vbDownloadBtn = document.getElementById('vbcable-download-btn');
+const vbRecheckBtn = document.getElementById('vbcable-recheck-btn');
+
+async function checkVBCable() {
+  const result = await window.sb.checkVBCable();
+
+  if (!result.supported) {
+    vbBanner.style.display = 'none';
+    return;
+  }
+
+  vbBanner.style.display = 'flex';
+
+  if (result.installed) {
+    vbBanner.className = 'vbcable-banner ok';
+    vbText.textContent = '✅ Micrófono virtual (VB-CABLE) detectado.';
+    vbDownloadBtn.style.display = 'none';
+  } else {
+    vbBanner.className = 'vbcable-banner warn';
+    vbText.textContent = result.error
+      ? '⚠ No se pudo comprobar el micrófono virtual.'
+      : '⚠ No se detectó VB-CABLE. Instalalo para enviar el audio a otras apps como micrófono.';
+    vbDownloadBtn.style.display = 'inline-block';
+  }
+}
+
+vbDownloadBtn.addEventListener('click', () => {
+  window.sb.openVBCableDownload();
+});
+
+vbRecheckBtn.addEventListener('click', () => {
+  checkVBCable();
+});
+
+checkVBCable();
+
+// --- Selector de dispositivo de salida ---
+const outputSelect = document.getElementById('output-device-select');
+let currentOutputDeviceId = '';
+
+// Aplica el dispositivo elegido a un <audio> individual. setSinkId es lo
+// que le dice al elemento "no salgas por los parlantes por defecto,
+// salí por este dispositivo" (ej. el CABLE Input de VB-CABLE).
+async function applyOutputDevice(audio) {
+  if (!currentOutputDeviceId || typeof audio.setSinkId !== 'function') return;
+  try {
+    await audio.setSinkId(currentOutputDeviceId);
+  } catch (err) {
+    console.error('No se pudo aplicar el dispositivo de salida:', err);
+  }
+}
+
+async function applyOutputDeviceToAll() {
+  for (const entry of sounds.values()) {
+    await applyOutputDevice(entry.audio);
+  }
+}
+
+async function loadOutputDevices() {
+  try {
+    // Pedimos permiso de audio una sola vez para poder ver los nombres
+    // reales de los dispositivos. No grabamos ni usamos el stream.
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => track.stop());
+  } catch (err) {
+    console.error('No se pudo pedir permiso de audio:', err);
+  }
+
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const outputs = devices.filter((d) => d.kind === 'audiooutput');
+
+  currentOutputDeviceId = await window.sb.getOutputDevice();
+
+  outputSelect.innerHTML = '';
+  outputs.forEach((device) => {
+    const option = document.createElement('option');
+    option.value = device.deviceId;
+    option.textContent = device.label || `Dispositivo ${device.deviceId.slice(0, 6)}`;
+    outputSelect.appendChild(option);
+  });
+
+  // Si el dispositivo guardado ya no existe (se desconectó, por ejemplo),
+  // volvemos al predeterminado en vez de fallar en silencio.
+  if (outputs.some((d) => d.deviceId === currentOutputDeviceId)) {
+    outputSelect.value = currentOutputDeviceId;
+  } else {
+    currentOutputDeviceId = outputs[0] ? outputs[0].deviceId : '';
+    outputSelect.value = currentOutputDeviceId;
+  }
+
+  await applyOutputDeviceToAll();
+}
+
+outputSelect.addEventListener('change', async () => {
+  currentOutputDeviceId = outputSelect.value;
+  await window.sb.saveOutputDevice(currentOutputDeviceId);
+  await applyOutputDeviceToAll();
+});
+
+loadOutputDevices();

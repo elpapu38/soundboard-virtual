@@ -69,6 +69,16 @@ main {
   background: #3a3a3e;
 }
 
+#output-device-select {
+  background: #2d2d30;
+  color: #eee;
+  border: 1px solid #3e3e42;
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-size: 12px;
+  max-width: 220px;
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -167,5 +177,55 @@ main {
 }
 
 .popover-actions button:hover {
+  background: #0092e0;
+}
+
+.hotkey-hint {
+  font-size: 11px;
+  color: #888;
+  margin: -2px 0 0;
+}
+
+.hotkey-warning {
+  font-size: 11px;
+  color: #e74c3c;
+  margin: -2px 0 0;
+}
+
+.vbcable-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  font-size: 13px;
+  border-bottom: 1px solid #333;
+}
+
+.vbcable-banner.ok {
+  background: #1e3a24;
+  color: #a5d6a7;
+}
+
+.vbcable-banner.warn {
+  background: #3a2e1e;
+  color: #ffcc80;
+}
+
+.vbcable-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.vbcable-actions button {
+  background: #007acc;
+  border: none;
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.vbcable-actions button:hover {
   background: #0092e0;
 }
