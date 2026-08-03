@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>SoundBoard Virtual</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>🎵 SoundBoard Virtual</h1>
+    <div class="header-actions">
+      <button id="stop-all-btn" title="Detener todos los sonidos">⏹ Detener todo</button>
+      <span id="version"></span>
+    </div>
+  </header>
+
+  <main>
+    <p id="empty-msg">No se encontraron sonidos en <code>assets/sounds</code>. Agregá archivos .mp3, .wav, .ogg o .flac ahí y reiniciá la app.</p>
+    <div id="sound-grid" class="grid"></div>
+  </main>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

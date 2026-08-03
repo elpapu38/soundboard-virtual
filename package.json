@@ -1,0 +1,26 @@
+{
+  "name": "soundboard-virtual",
+  "version": "0.1.0",
+  "description": "Soundboard de escritorio con salida a micrófono virtual",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "electron-store": "^8.2.0"
+  },
+  "build": {
+    "appId": "com.tuusuario.soundboardvirtual",
+    "productName": "SoundBoard Virtual",
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

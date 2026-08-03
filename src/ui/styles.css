@@ -1,0 +1,171 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: #1e1e1e;
+  color: #eee;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: #252526;
+  border-bottom: 1px solid #333;
+}
+
+header h1 {
+  font-size: 18px;
+}
+
+#version {
+  font-size: 12px;
+  color: #888;
+}
+
+main {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+#empty-msg {
+  color: #999;
+  display: none;
+}
+
+#empty-msg code {
+  background: #333;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.grid {
+  display: none;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.sound-btn {
+  background: #2d2d30;
+  border: 1px solid #3e3e42;
+  color: #eee;
+  padding: 20px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.sound-btn:hover {
+  background: #3a3a3e;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+#stop-all-btn {
+  background: #b03a2e;
+  border: none;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+#stop-all-btn:hover {
+  background: #cb4335;
+}
+
+.sound-btn-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.sound-btn {
+  width: 100%;
+}
+
+.sound-btn.playing {
+  outline: 2px solid #4caf50;
+  outline-offset: -2px;
+}
+
+.cfg-gear {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  background: transparent;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.cfg-gear:hover {
+  color: #fff;
+}
+
+.hotkey-label {
+  display: block;
+  text-align: center;
+  font-size: 10px;
+  color: #888;
+  margin-top: 3px;
+  min-height: 12px;
+}
+
+.config-popover {
+  position: absolute;
+  background: #2d2d30;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+  min-width: 200px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+.config-popover label {
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.popover-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.popover-actions button {
+  background: #007acc;
+  border: none;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.popover-actions button:hover {
+  background: #0092e0;
+}
