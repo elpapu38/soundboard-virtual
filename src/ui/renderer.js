@@ -71,6 +71,9 @@ function openConfigPopover(name, anchorBtn) {
     <p class="hotkey-hint">Sugerencia: Ctrl+Alt+Shift+Tecla casi nunca choca con otras apps.</p>
     <p class="hotkey-warning" id="cfg-hotkey-warning" style="display:none;">⚠ Ese atajo ya está en uso por otra app, probá otra combinación.</p>
     <label><input type="checkbox" id="cfg-loop" ${config.loop ? 'checked' : ''}> Repetir en bucle</label>
+    <div class="popover-danger">
+      <button id="cfg-delete" type="button">🗑 Eliminar sonido</button>
+    </div>
     <div class="popover-actions">
       <button id="cfg-clear-hotkey" type="button">Quitar atajo</button>
       <button id="cfg-save" type="button">Guardar</button>
@@ -114,6 +117,19 @@ function openConfigPopover(name, anchorBtn) {
   pop.querySelector('#cfg-clear-hotkey').addEventListener('click', () => {
     capturedHotkey = '';
     hotkeyInput.value = '';
+  });
+
+  pop.querySelector('#cfg-delete').addEventListener('click', async () => {
+    const sure = confirm(`¿Eliminar "${entry.name}" definitivamente?\n\nEsto borra el archivo de audio y su configuración. No se puede deshacer.`);
+    if (!sure) return;
+
+    const result = await window.sb.deleteSound(name);
+    if (result.ok) {
+      closePopover();
+      await loadSounds();
+    } else {
+      alert('No se pudo eliminar: ' + (result.error || 'error desconocido'));
+    }
   });
 
   pop.querySelector('#cfg-save').addEventListener('click', async () => {

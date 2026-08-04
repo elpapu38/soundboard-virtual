@@ -323,6 +323,28 @@ main {
   gap: 4px;
 }
 
+.popover-danger {
+  border-top: 1px solid #444;
+  padding-top: 8px;
+  margin-top: 2px;
+}
+
+#cfg-delete {
+  width: 100%;
+  background: transparent;
+  border: 1px solid #b03a2e;
+  color: #e57368;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+#cfg-delete:hover {
+  background: #b03a2e;
+  color: #fff;
+}
+
 .popover-actions {
   display: flex;
   justify-content: space-between;

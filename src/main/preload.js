@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('sb', {
-  version: () => '1.0.1',
+  version: () => '1.0.2',
   listSounds: () => ipcRenderer.invoke('sounds:list'),
   getConfig: (name) => ipcRenderer.invoke('config:get', name),
   saveConfig: (name, config) => ipcRenderer.invoke('config:save', name, config),
@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('sb', {
   checkVBCable: () => ipcRenderer.invoke('vbcable:check'),
   openVBCableDownload: () => ipcRenderer.invoke('vbcable:open-download-page'),
   addSounds: (category) => ipcRenderer.invoke('sounds:add', category),
+  deleteSound: (id) => ipcRenderer.invoke('sounds:delete', id),
   getOutputDevice: () => ipcRenderer.invoke('settings:get-output-device'),
   saveOutputDevice: (deviceId) => ipcRenderer.invoke('settings:save-output-device', deviceId),
   getMixer: () => ipcRenderer.invoke('settings:get-mixer'),

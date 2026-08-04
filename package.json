@@ -1,6 +1,6 @@
 {
   "name": "soundboard-virtual",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Soundboard de escritorio con salida a micrófono virtual",
   "main": "src/main/main.js",
   "scripts": {
@@ -24,7 +24,8 @@
     "productName": "SoundBoard Virtual",
     "asar": false,
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "assets/icons/icon.ico"
     },
     "publish": [
       {

@@ -34,7 +34,8 @@ function listSoundFiles() {
       id,
       name,
       category,
-      path: 'file://' + filePath.replace(/\\/g, '/')
+      path: 'file://' + filePath.replace(/\\/g, '/'),
+      fullPath: filePath
     });
   }
 
@@ -120,6 +121,23 @@ ipcMain.handle('sounds:add', async (event, category) => {
   });
 
   return { ok: true, added };
+});
+
+// Borra el archivo de audio del disco y su configuración guardada
+// (color, volumen, atajo). También refresca los atajos globales por si
+// el sonido borrado tenía uno registrado.
+ipcMain.handle('sounds:delete', (event, id) => {
+  const sound = listSoundFiles().find((s) => s.id === id);
+  if (!sound) return { ok: false, error: 'No se encontró el sonido.' };
+
+  try {
+    fs.unlinkSync(sound.fullPath);
+    store.delete(id);
+    registerHotkeys();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 });
 
 // Configuración general de la app (no por sonido), como el dispositivo
@@ -260,6 +278,7 @@ function createWindow() {
     minWidth: 700,
     minHeight: 500,
     backgroundColor: '#1e1e1e',
+    icon: path.join(__dirname, '..', '..', 'assets', 'icons', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
