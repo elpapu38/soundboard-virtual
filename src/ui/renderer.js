@@ -14,10 +14,15 @@ function stopSound(name) {
   entry.audio.currentTime = 0;
 }
 
+let masterVolume = 1;
+let allMuted = false;
+
 function playSound(name) {
   const entry = sounds.get(name);
   if (!entry) return;
-  entry.audio.volume = entry.config.volume;
+  // Volumen final = volumen individual del botón × volumen maestro.
+  entry.audio.volume = entry.config.volume * masterVolume;
+  entry.audio.muted = allMuted;
   entry.audio.loop = entry.config.loop;
   entry.audio.currentTime = 0;
   entry.audio.play().catch((err) => console.error('No se pudo reproducir:', err));
@@ -328,3 +333,51 @@ outputSelect.addEventListener('change', async () => {
 });
 
 loadOutputDevices();
+
+// --- Mezclador interno: volumen maestro y mute general ---
+const masterVolumeSlider = document.getElementById('master-volume');
+const muteAllBtn = document.getElementById('mute-all-btn');
+
+// Aplica el estado actual (volumen maestro + mute) a todo lo que esté
+// sonando en este momento, no solo a lo próximo que se reproduzca.
+function applyMixerToPlaying() {
+  sounds.forEach((entry) => {
+    entry.audio.volume = entry.config.volume * masterVolume;
+    entry.audio.muted = allMuted;
+  });
+}
+
+async function saveMixer() {
+  await window.sb.saveMixer({ masterVolume, muted: allMuted });
+}
+
+function updateMuteButtonLabel() {
+  muteAllBtn.textContent = allMuted ? '🔇 Efectos muteados' : '🔇 Mutear efectos';
+  muteAllBtn.classList.toggle('active', allMuted);
+}
+
+masterVolumeSlider.addEventListener('input', () => {
+  masterVolume = parseFloat(masterVolumeSlider.value);
+  applyMixerToPlaying();
+});
+
+masterVolumeSlider.addEventListener('change', () => {
+  saveMixer();
+});
+
+muteAllBtn.addEventListener('click', () => {
+  allMuted = !allMuted;
+  updateMuteButtonLabel();
+  applyMixerToPlaying();
+  saveMixer();
+});
+
+async function loadMixer() {
+  const mixer = await window.sb.getMixer();
+  masterVolume = mixer.masterVolume;
+  allMuted = mixer.muted;
+  masterVolumeSlider.value = masterVolume;
+  updateMuteButtonLabel();
+}
+
+loadMixer();

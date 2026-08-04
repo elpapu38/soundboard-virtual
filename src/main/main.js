@@ -65,6 +65,11 @@ ipcMain.handle('settings:save-output-device', (event, deviceId) => {
   store.set('outputDeviceId', deviceId);
   return true;
 });
+ipcMain.handle('settings:get-mixer', () => store.get('mixer', { masterVolume: 1, muted: false }));
+ipcMain.handle('settings:save-mixer', (event, mixer) => {
+  store.set('mixer', mixer);
+  return true;
+});
 
 // Vuelve a registrar todos los atajos globales según la configuración
 // guardada. Se llama al arrancar y cada vez que se guarda una config nueva.

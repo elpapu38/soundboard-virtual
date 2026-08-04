@@ -10,5 +10,7 @@ contextBridge.exposeInMainWorld('sb', {
   checkVBCable: () => ipcRenderer.invoke('vbcable:check'),
   openVBCableDownload: () => ipcRenderer.invoke('vbcable:open-download-page'),
   getOutputDevice: () => ipcRenderer.invoke('settings:get-output-device'),
-  saveOutputDevice: (deviceId) => ipcRenderer.invoke('settings:save-output-device', deviceId)
+  saveOutputDevice: (deviceId) => ipcRenderer.invoke('settings:save-output-device', deviceId),
+  getMixer: () => ipcRenderer.invoke('settings:get-mixer'),
+  saveMixer: (mixer) => ipcRenderer.invoke('settings:save-mixer', mixer)
 });

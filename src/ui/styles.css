@@ -79,6 +79,36 @@ main {
   max-width: 220px;
 }
 
+.master-volume {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.master-volume input[type="range"] {
+  width: 90px;
+}
+
+#mute-all-btn {
+  background: #2d2d30;
+  border: 1px solid #3e3e42;
+  color: #eee;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+#mute-all-btn:hover {
+  background: #3a3a3e;
+}
+
+#mute-all-btn.active {
+  background: #b03a2e;
+  border-color: #b03a2e;
+}
+
 .header-actions {
   display: flex;
   align-items: center;
