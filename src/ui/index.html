@@ -15,6 +15,8 @@
       </label>
       <button id="mute-all-btn" title="Mutear todos los efectos">🔇 Mutear efectos</button>
       <button id="stop-all-btn" title="Detener todos los sonidos">⏹ Detener todo</button>
+      <button id="export-btn" title="Exportar biblioteca">📤 Exportar</button>
+      <button id="import-btn" title="Importar biblioteca">📥 Importar</button>
       <span id="version"></span>
     </div>
   </header>
@@ -28,7 +30,11 @@
   </div>
 
   <main>
-    <p id="empty-msg">No se encontraron sonidos en <code>assets/sounds</code>. Agregá archivos .mp3, .wav, .ogg o .flac ahí y reiniciá la app.</p>
+    <p id="empty-msg">No se encontraron sonidos en <code>assets/sounds</code>. Agregá archivos .mp3, .wav, .ogg o .flac ahí (o en subcarpetas, para categorías) y reiniciá la app, o usá el botón de abajo.</p>
+    <div class="toolbar">
+      <button id="add-sound-btn">➕ Agregar sonido(s)</button>
+    </div>
+    <div id="category-tabs" class="category-tabs"></div>
     <div id="sound-grid" class="grid"></div>
   </main>
 

@@ -3,3 +3,7 @@ dist/
 build/
 *.log
 config/settings.json
+assets/sounds/*
+!assets/sounds/.gitkeep
+exports/*
+!exports/.gitkeep

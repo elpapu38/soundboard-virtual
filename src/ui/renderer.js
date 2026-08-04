@@ -4,11 +4,11 @@ const grid = document.getElementById('sound-grid');
 const emptyMsg = document.getElementById('empty-msg');
 const stopAllBtn = document.getElementById('stop-all-btn');
 
-// name -> { audio, config, btn, hotkeyLabel, name }
+// id ("categoría/nombre") -> { audio, config, btn, hotkeyLabel, id, name, category }
 const sounds = new Map();
 
-function stopSound(name) {
-  const entry = sounds.get(name);
+function stopSound(id) {
+  const entry = sounds.get(id);
   if (!entry) return;
   entry.audio.pause();
   entry.audio.currentTime = 0;
@@ -17,8 +17,8 @@ function stopSound(name) {
 let masterVolume = 1;
 let allMuted = false;
 
-function playSound(name) {
-  const entry = sounds.get(name);
+function playSound(id) {
+  const entry = sounds.get(id);
   if (!entry) return;
   // Volumen final = volumen individual del botón × volumen maestro.
   entry.audio.volume = entry.config.volume * masterVolume;
@@ -29,7 +29,7 @@ function playSound(name) {
 }
 
 stopAllBtn.addEventListener('click', () => {
-  sounds.forEach((entry) => stopSound(entry.name));
+  sounds.forEach((entry) => stopSound(entry.id));
 });
 
 // --- Panel de configuración por sonido ---
@@ -147,21 +147,61 @@ document.addEventListener('click', (e) => {
 });
 
 // --- Carga inicial de sonidos ---
+const categoryTabs = document.getElementById('category-tabs');
+let activeCategory = 'Todos';
+
+function renderCategoryTabs(categories) {
+  categoryTabs.innerHTML = '';
+
+  if (categories.length <= 1) {
+    // Con una sola categoría (o ninguna) no tiene sentido mostrar pestañas.
+    categoryTabs.style.display = 'none';
+    return;
+  }
+
+  categoryTabs.style.display = 'flex';
+  const allTabs = ['Todos', ...categories];
+
+  allTabs.forEach((cat) => {
+    const tab = document.createElement('button');
+    tab.className = 'category-tab' + (cat === activeCategory ? ' active' : '');
+    tab.textContent = cat;
+    tab.addEventListener('click', () => {
+      activeCategory = cat;
+      renderCategoryTabs(categories);
+      applyCategoryFilter();
+    });
+    categoryTabs.appendChild(tab);
+  });
+}
+
+function applyCategoryFilter() {
+  sounds.forEach((entry) => {
+    const visible = activeCategory === 'Todos' || entry.category === activeCategory;
+    entry.wrapper.style.display = visible ? '' : 'none';
+  });
+}
+
 async function loadSounds() {
   const soundFiles = await window.sb.listSounds();
 
   if (soundFiles.length === 0) {
     emptyMsg.style.display = 'block';
     grid.style.display = 'none';
+    categoryTabs.style.display = 'none';
     return;
   }
 
   emptyMsg.style.display = 'none';
   grid.style.display = 'grid';
   grid.innerHTML = '';
+  sounds.clear();
+
+  const categories = [...new Set(soundFiles.map((s) => s.category))];
+  renderCategoryTabs(categories);
 
   for (const sound of soundFiles) {
-    const config = await window.sb.getConfig(sound.name);
+    const config = await window.sb.getConfig(sound.id);
     const audio = new Audio(sound.path);
     applyOutputDevice(audio);
 
@@ -185,7 +225,10 @@ async function loadSounds() {
     wrapper.appendChild(hotkeyLabel);
     grid.appendChild(wrapper);
 
-    sounds.set(sound.name, { audio, config, btn, hotkeyLabel, name: sound.name });
+    sounds.set(sound.id, {
+      audio, config, btn, hotkeyLabel, wrapper,
+      id: sound.id, name: sound.name, category: sound.category
+    });
 
     audio.addEventListener('play', () => btn.classList.add('playing'));
     audio.addEventListener('pause', () => btn.classList.remove('playing'));
@@ -194,27 +237,86 @@ async function loadSounds() {
     // Un clic: si está sonando, lo para. Si no, lo reproduce.
     btn.addEventListener('click', () => {
       if (audio.paused) {
-        playSound(sound.name);
+        playSound(sound.id);
       } else {
-        stopSound(sound.name);
+        stopSound(sound.id);
       }
     });
 
     gear.addEventListener('click', (e) => {
       e.stopPropagation();
-      openConfigPopover(sound.name, gear);
+      openConfigPopover(sound.id, gear);
     });
 
     // Clic derecho sobre el botón también abre la configuración,
     // como acceso rápido sin tener que apuntarle al ⚙.
     btn.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      openConfigPopover(sound.name, btn);
+      openConfigPopover(sound.id, btn);
     });
 
-    applyButtonStyle(sound.name);
+    applyButtonStyle(sound.id);
   }
+
+  applyCategoryFilter();
 }
+
+// --- Agregar sonidos nuevos desde la app ---
+const addSoundBtn = document.getElementById('add-sound-btn');
+
+// Electron no soporta window.prompt() (solo alert/confirm tienen
+// equivalente nativo), así que armamos un modal propio para pedir
+// el nombre de categoría. Devuelve el texto ingresado, o null si
+// cancelan.
+function askCategoryName() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <p>Nombre de la categoría (carpeta) para estos sonidos.<br>
+        Dejalo vacío para agregarlos sin categoría (General).</p>
+        <input type="text" id="category-name-input" placeholder="Ej: Memes">
+        <div class="modal-actions">
+          <button id="category-cancel-btn" type="button">Cancelar</button>
+          <button id="category-accept-btn" type="button">Aceptar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector('#category-name-input');
+    input.focus();
+
+    function finish(value) {
+      overlay.remove();
+      resolve(value);
+    }
+
+    overlay.querySelector('#category-cancel-btn').addEventListener('click', () => finish(null));
+    overlay.querySelector('#category-accept-btn').addEventListener('click', () => finish(input.value));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') finish(input.value);
+      if (e.key === 'Escape') finish(null);
+    });
+  });
+}
+
+addSoundBtn.addEventListener('click', async () => {
+  const category = await askCategoryName();
+
+  // Si cancela, category viene null: no hacemos nada.
+  if (category === null) return;
+
+  const result = await window.sb.addSounds(category.trim() || 'General');
+  if (result.canceled) return;
+
+  if (result.ok) {
+    await loadSounds();
+  } else {
+    alert('No se pudieron agregar los sonidos: ' + (result.error || 'error desconocido'));
+  }
+});
 
 // Cuando el proceso principal detecta un atajo global, hacemos lo mismo
 // que si hubieran hecho clic en el botón.
@@ -381,3 +483,36 @@ async function loadMixer() {
 }
 
 loadMixer();
+
+// --- Exportar / Importar biblioteca ---
+const exportBtn = document.getElementById('export-btn');
+const importBtn = document.getElementById('import-btn');
+
+exportBtn.addEventListener('click', async () => {
+  const result = await window.sb.exportLibrary();
+  if (result.canceled) return;
+  if (result.ok) {
+    alert(`Biblioteca exportada correctamente a:\n${result.path}`);
+  } else {
+    alert('No se pudo exportar: ' + (result.error || 'error desconocido'));
+  }
+});
+
+importBtn.addEventListener('click', async () => {
+  const replace = confirm(
+    '¿Cómo querés importar?\n\n' +
+    'Aceptar = Reemplazar toda tu biblioteca actual por la importada\n' +
+    'Cancelar = Fusionar (agregar/actualizar sin borrar lo que ya tenés)'
+  );
+  const mode = replace ? 'replace' : 'merge';
+
+  const result = await window.sb.importLibrary(mode);
+  if (result.canceled) return;
+
+  if (result.ok) {
+    alert('Biblioteca importada correctamente. La app se va a recargar.');
+    location.reload();
+  } else {
+    alert('No se pudo importar: ' + (result.error || 'error desconocido'));
+  }
+});

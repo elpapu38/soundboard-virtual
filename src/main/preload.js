@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('sb', {
-  version: () => '0.1.0',
+  version: () => '1.0.1',
   listSounds: () => ipcRenderer.invoke('sounds:list'),
   getConfig: (name) => ipcRenderer.invoke('config:get', name),
   saveConfig: (name, config) => ipcRenderer.invoke('config:save', name, config),
@@ -9,8 +9,11 @@ contextBridge.exposeInMainWorld('sb', {
   onHotkeyTrigger: (callback) => ipcRenderer.on('hotkey:trigger', (event, name) => callback(name)),
   checkVBCable: () => ipcRenderer.invoke('vbcable:check'),
   openVBCableDownload: () => ipcRenderer.invoke('vbcable:open-download-page'),
+  addSounds: (category) => ipcRenderer.invoke('sounds:add', category),
   getOutputDevice: () => ipcRenderer.invoke('settings:get-output-device'),
   saveOutputDevice: (deviceId) => ipcRenderer.invoke('settings:save-output-device', deviceId),
   getMixer: () => ipcRenderer.invoke('settings:get-mixer'),
-  saveMixer: (mixer) => ipcRenderer.invoke('settings:save-mixer', mixer)
+  saveMixer: (mixer) => ipcRenderer.invoke('settings:save-mixer', mixer),
+  exportLibrary: () => ipcRenderer.invoke('library:export'),
+  importLibrary: (mode) => ipcRenderer.invoke('library:import', mode)
 });

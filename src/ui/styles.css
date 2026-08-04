@@ -48,6 +48,123 @@ main {
   border-radius: 4px;
 }
 
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.modal-box {
+  background: #2d2d30;
+  border: 1px solid #444;
+  border-radius: 10px;
+  padding: 20px;
+  width: 320px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.modal-box p {
+  font-size: 13px;
+  color: #ccc;
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.modal-box input[type="text"] {
+  width: 100%;
+  padding: 8px;
+  background: #1e1e1e;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #eee;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal-actions button {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+#category-cancel-btn {
+  background: #444;
+  color: #eee;
+}
+
+#category-cancel-btn:hover {
+  background: #555;
+}
+
+#category-accept-btn {
+  background: #007acc;
+  color: #fff;
+}
+
+#category-accept-btn:hover {
+  background: #0092e0;
+}
+
+.toolbar {
+  margin-bottom: 14px;
+}
+
+#add-sound-btn {
+  background: #2e7d32;
+  border: none;
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+#add-sound-btn:hover {
+  background: #388e3c;
+}
+
+.category-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.category-tab {
+  background: #2d2d30;
+  border: 1px solid #3e3e42;
+  color: #ccc;
+  padding: 6px 14px;
+  border-radius: 16px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.category-tab:hover {
+  background: #3a3a3e;
+}
+
+.category-tab.active {
+  background: #007acc;
+  border-color: #007acc;
+  color: #fff;
+}
+
 .grid {
   display: none;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -107,6 +224,22 @@ main {
 #mute-all-btn.active {
   background: #b03a2e;
   border-color: #b03a2e;
+}
+
+#export-btn,
+#import-btn {
+  background: #2d2d30;
+  border: 1px solid #3e3e42;
+  color: #eee;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+#export-btn:hover,
+#import-btn:hover {
+  background: #3a3a3e;
 }
 
 .header-actions {
