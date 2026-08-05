@@ -285,6 +285,11 @@ function createWindow() {
     backgroundColor: '#1e1e1e',
     icon: path.join(__dirname, '..', '..', 'assets', 'icons', 'icon.png'),
     webPreferences: {
+      // Sin esto, Electron le baja prioridad de procesamiento a la
+      // ventana cuando no está en foco (ej: mirando Discord en vez del
+      // SoundBoard) — eso corta/entrecorta el audio de la mezcla justo
+      // en el caso de uso real de esta app.
+      backgroundThrottling: false,
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false

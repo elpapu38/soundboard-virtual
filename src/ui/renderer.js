@@ -8,7 +8,11 @@ const stopAllBtn = document.getElementById('stop-all-btn');
 // Todo lo que suena (efectos + opcionalmente el micrófono) se conecta a
 // este único "destino" de Web Audio. El resultado combinado se manda a
 // un <audio> oculto cuyo dispositivo de salida elegimos (CABLE Input).
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+// latencyHint: 'playback' prioriza buffers más grandes (más estables,
+// menos propensos a cortes/glitches) en vez de la mínima latencia
+// posible. Para un soundboard, unos milisegundos extra no se notan;
+// un corte o distorsión en el audio sí.
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback' });
 const mixDestination = audioCtx.createMediaStreamDestination();
 
 const mixOutputEl = new Audio();
@@ -522,7 +526,16 @@ async function startMic(deviceId) {
   await stopMic();
   try {
     micStream = await navigator.mediaDevices.getUserMedia({
-      audio: deviceId ? { deviceId: { exact: deviceId } } : true
+      audio: {
+        deviceId: deviceId ? { exact: deviceId } : undefined,
+        // Desactivado a propósito: estos procesamientos están pensados
+        // para un micrófono acústico común, y pueden distorsionar una
+        // señal que ya viene procesada (como la de WO Mic, que llega
+        // por red desde el celular).
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      }
     });
     micSourceNode = audioCtx.createMediaStreamSource(micStream);
     micSourceNode.connect(micGainNode);
