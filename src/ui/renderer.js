@@ -4,6 +4,32 @@ const grid = document.getElementById('sound-grid');
 const emptyMsg = document.getElementById('empty-msg');
 const stopAllBtn = document.getElementById('stop-all-btn');
 
+// --- Motor de mezcla (reemplaza a VoiceMeeter) ---
+// Todo lo que suena (efectos + opcionalmente el micrófono) se conecta a
+// este único "destino" de Web Audio. El resultado combinado se manda a
+// un <audio> oculto cuyo dispositivo de salida elegimos (CABLE Input).
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const mixDestination = audioCtx.createMediaStreamDestination();
+
+const mixOutputEl = new Audio();
+mixOutputEl.srcObject = mixDestination.stream;
+// Importante: NO arrancamos la reproducción acá todavía. Si empezamos a
+// sonar antes de aplicar el dispositivo de salida (CABLE Input), puede
+// quedar sonando por los parlantes por defecto. Arranca recién después
+// de aplicar el sinkId, más abajo en loadOutputDevices().
+
+// Conecta un <audio> de un sonido al grafo de mezcla. Solo se puede
+// llamar una vez por elemento (por eso loadSounds() recrea los <audio>
+// cada vez que recarga la lista, en vez de reutilizarlos).
+function connectSoundToMix(audio) {
+  try {
+    const node = audioCtx.createMediaElementSource(audio);
+    node.connect(mixDestination);
+  } catch (err) {
+    console.error('No se pudo conectar el sonido a la mezcla:', err);
+  }
+}
+
 // id ("categoría/nombre") -> { audio, config, btn, hotkeyLabel, id, name, category }
 const sounds = new Map();
 
@@ -20,6 +46,7 @@ let allMuted = false;
 function playSound(id) {
   const entry = sounds.get(id);
   if (!entry) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
   // Volumen final = volumen individual del botón × volumen maestro.
   entry.audio.volume = entry.config.volume * masterVolume;
   entry.audio.muted = allMuted;
@@ -219,7 +246,7 @@ async function loadSounds() {
   for (const sound of soundFiles) {
     const config = await window.sb.getConfig(sound.id);
     const audio = new Audio(sound.path);
-    applyOutputDevice(audio);
+    connectSoundToMix(audio);
 
     const wrapper = document.createElement('div');
     wrapper.className = 'sound-btn-wrapper';
@@ -387,32 +414,31 @@ vbRecheckBtn.addEventListener('click', () => {
 
 checkVBCable();
 
-// --- Selector de dispositivo de salida ---
+// --- Selector de dispositivo de salida (se aplica a la MEZCLA completa) ---
 const outputSelect = document.getElementById('output-device-select');
 let currentOutputDeviceId = '';
 
-// Aplica el dispositivo elegido a un <audio> individual. setSinkId es lo
-// que le dice al elemento "no salgas por los parlantes por defecto,
-// salí por este dispositivo" (ej. el CABLE Input de VB-CABLE).
-async function applyOutputDevice(audio) {
-  if (!currentOutputDeviceId || typeof audio.setSinkId !== 'function') return;
+async function applyOutputDevice() {
+  if (!currentOutputDeviceId || typeof mixOutputEl.setSinkId !== 'function') {
+    console.warn('[mezcla] No hay dispositivo de salida elegido, o setSinkId no está disponible.');
+    return;
+  }
   try {
-    await audio.setSinkId(currentOutputDeviceId);
+    await mixOutputEl.setSinkId(currentOutputDeviceId);
+    console.log('[mezcla] Dispositivo de salida aplicado:', currentOutputDeviceId);
   } catch (err) {
-    console.error('No se pudo aplicar el dispositivo de salida:', err);
+    console.error('[mezcla] No se pudo aplicar el dispositivo de salida:', err);
   }
 }
 
-async function applyOutputDeviceToAll() {
-  for (const entry of sounds.values()) {
-    await applyOutputDevice(entry.audio);
-  }
-}
+let allOutputDevices = [];
+let allInputDevices = [];
 
-async function loadOutputDevices() {
+async function refreshDeviceLists() {
   try {
     // Pedimos permiso de audio una sola vez para poder ver los nombres
-    // reales de los dispositivos. No grabamos ni usamos el stream.
+    // reales de los dispositivos. No grabamos ni usamos este stream de
+    // prueba: es solo para desbloquear las etiquetas.
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     stream.getTracks().forEach((track) => track.stop());
   } catch (err) {
@@ -420,37 +446,170 @@ async function loadOutputDevices() {
   }
 
   const devices = await navigator.mediaDevices.enumerateDevices();
-  const outputs = devices.filter((d) => d.kind === 'audiooutput');
+  allOutputDevices = devices.filter((d) => d.kind === 'audiooutput');
+  allInputDevices = devices.filter((d) => d.kind === 'audioinput');
+}
+
+async function loadOutputDevices() {
+  await refreshDeviceLists();
 
   currentOutputDeviceId = await window.sb.getOutputDevice();
 
   outputSelect.innerHTML = '';
-  outputs.forEach((device) => {
+  allOutputDevices.forEach((device) => {
     const option = document.createElement('option');
     option.value = device.deviceId;
     option.textContent = device.label || `Dispositivo ${device.deviceId.slice(0, 6)}`;
     outputSelect.appendChild(option);
   });
 
-  // Si el dispositivo guardado ya no existe (se desconectó, por ejemplo),
-  // volvemos al predeterminado en vez de fallar en silencio.
-  if (outputs.some((d) => d.deviceId === currentOutputDeviceId)) {
+  if (allOutputDevices.some((d) => d.deviceId === currentOutputDeviceId)) {
     outputSelect.value = currentOutputDeviceId;
   } else {
-    currentOutputDeviceId = outputs[0] ? outputs[0].deviceId : '';
+    currentOutputDeviceId = allOutputDevices[0] ? allOutputDevices[0].deviceId : '';
     outputSelect.value = currentOutputDeviceId;
   }
 
-  await applyOutputDeviceToAll();
+  await applyOutputDevice();
+
+  // Recién ahora arrancamos a reproducir la mezcla, ya con el
+  // dispositivo de salida correcto aplicado.
+  mixOutputEl.play().catch((err) => console.error('[mezcla] No se pudo iniciar la reproducción:', err));
 }
 
 outputSelect.addEventListener('change', async () => {
   currentOutputDeviceId = outputSelect.value;
   await window.sb.saveOutputDevice(currentOutputDeviceId);
-  await applyOutputDeviceToAll();
+  await applyOutputDevice();
 });
 
 loadOutputDevices();
+
+// --- Micrófono: capturarlo y mezclarlo con los efectos (reemplaza a VoiceMeeter) ---
+const micEnabledCheckbox = document.getElementById('mic-enabled');
+const micDeviceSelect = document.getElementById('mic-device-select');
+const micVolumeSlider = document.getElementById('mic-volume');
+
+const micGainNode = audioCtx.createGain();
+micGainNode.connect(mixDestination);
+
+// Medidor visual: tapea la señal del micrófono (después del volumen)
+// para mostrar si realmente está entrando audio, sin depender de mirar
+// otra app externa.
+const micAnalyser = audioCtx.createAnalyser();
+micAnalyser.fftSize = 256;
+micGainNode.connect(micAnalyser);
+const micMeterFill = document.getElementById('mic-meter-fill');
+const micMeterData = new Uint8Array(micAnalyser.frequencyBinCount);
+
+function updateMicMeter() {
+  micAnalyser.getByteTimeDomainData(micMeterData);
+  let sumSquares = 0;
+  for (let i = 0; i < micMeterData.length; i++) {
+    const v = (micMeterData[i] - 128) / 128;
+    sumSquares += v * v;
+  }
+  const rms = Math.sqrt(sumSquares / micMeterData.length);
+  micMeterFill.style.width = Math.min(100, rms * 300) + '%';
+  requestAnimationFrame(updateMicMeter);
+}
+updateMicMeter();
+
+let micStream = null;
+let micSourceNode = null;
+
+async function startMic(deviceId) {
+  await stopMic();
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: deviceId ? { deviceId: { exact: deviceId } } : true
+    });
+    micSourceNode = audioCtx.createMediaStreamSource(micStream);
+    micSourceNode.connect(micGainNode);
+  } catch (err) {
+    console.error('No se pudo capturar el micrófono:', err);
+    alert('No se pudo activar el micrófono elegido: ' + err.message);
+    micEnabledCheckbox.checked = false;
+  }
+}
+
+async function stopMic() {
+  if (micSourceNode) {
+    micSourceNode.disconnect();
+    micSourceNode = null;
+  }
+  if (micStream) {
+    micStream.getTracks().forEach((track) => track.stop());
+    micStream = null;
+  }
+}
+
+function populateMicDeviceSelect(selectedId) {
+  micDeviceSelect.innerHTML = '';
+  allInputDevices.forEach((device) => {
+    const option = document.createElement('option');
+    option.value = device.deviceId;
+    option.textContent = device.label || `Micrófono ${device.deviceId.slice(0, 6)}`;
+    micDeviceSelect.appendChild(option);
+  });
+  if (allInputDevices.some((d) => d.deviceId === selectedId)) {
+    micDeviceSelect.value = selectedId;
+  }
+}
+
+async function saveMicSettings() {
+  await window.sb.saveMic({
+    deviceId: micDeviceSelect.value,
+    enabled: micEnabledCheckbox.checked,
+    volume: parseFloat(micVolumeSlider.value)
+  });
+}
+
+micEnabledCheckbox.addEventListener('change', async () => {
+  if (micEnabledCheckbox.checked) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    await startMic(micDeviceSelect.value);
+  } else {
+    await stopMic();
+  }
+  saveMicSettings();
+});
+
+micDeviceSelect.addEventListener('change', async () => {
+  if (micEnabledCheckbox.checked) {
+    await startMic(micDeviceSelect.value);
+  }
+  saveMicSettings();
+});
+
+micVolumeSlider.addEventListener('input', () => {
+  micGainNode.gain.value = parseFloat(micVolumeSlider.value);
+});
+
+micVolumeSlider.addEventListener('change', () => {
+  saveMicSettings();
+});
+
+async function loadMicSettings() {
+  // Si todavía no se cargó la lista de dispositivos (puede pasar si esto
+  // corre antes de que termine loadOutputDevices), la pedimos acá.
+  if (allInputDevices.length === 0) {
+    await refreshDeviceLists();
+  }
+
+  const mic = await window.sb.getMic();
+  populateMicDeviceSelect(mic.deviceId);
+  micVolumeSlider.value = mic.volume;
+  micGainNode.gain.value = mic.volume;
+  micEnabledCheckbox.checked = mic.enabled;
+
+  if (mic.enabled) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    await startMic(mic.deviceId);
+  }
+}
+
+loadMicSettings();
 
 // --- Mezclador interno: volumen maestro y mute general ---
 const masterVolumeSlider = document.getElementById('master-volume');

@@ -1,6 +1,6 @@
 {
   "name": "soundboard-virtual",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Soundboard de escritorio con salida a micrófono virtual",
   "main": "src/main/main.js",
   "scripts": {
@@ -31,7 +31,8 @@
       {
         "provider": "github",
         "owner": "elpapu38",
-        "repo": "soundboard-virtual"
+        "repo": "soundboard-virtual",
+        "releaseType": "release"
       }
     ]
   }

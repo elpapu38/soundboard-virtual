@@ -412,6 +412,60 @@ main {
   color: #4caf50;
 }
 
+.mic-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 20px;
+  background: #232326;
+  border-bottom: 1px solid #333;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.mic-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+#mic-device-select {
+  background: #2d2d30;
+  color: #eee;
+  border: 1px solid #3e3e42;
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 12px;
+  max-width: 220px;
+}
+
+.mic-volume-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mic-volume-label input[type="range"] {
+  width: 90px;
+}
+
+.mic-meter {
+  width: 100px;
+  height: 10px;
+  background: #1a1a1a;
+  border: 1px solid #3e3e42;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.mic-meter-fill {
+  height: 100%;
+  width: 0%;
+  background: #4caf50;
+  transition: width 0.05s linear;
+}
+
 .vbcable-banner {
   display: flex;
   align-items: center;

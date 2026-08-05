@@ -152,6 +152,11 @@ ipcMain.handle('settings:save-mixer', (event, mixer) => {
   store.set('mixer', mixer);
   return true;
 });
+ipcMain.handle('settings:get-mic', () => store.get('mic', { deviceId: '', enabled: false, volume: 1 }));
+ipcMain.handle('settings:save-mic', (event, mic) => {
+  store.set('mic', mic);
+  return true;
+});
 
 // Agrega recursivamente una carpeta del disco a una carpeta dentro del zip.
 function addDirToZip(zip, dirPath, zipFolder) {
