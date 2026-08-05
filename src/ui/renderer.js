@@ -15,6 +15,17 @@ const stopAllBtn = document.getElementById('stop-all-btn');
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback' });
 const mixDestination = audioCtx.createMediaStreamDestination();
 
+// Limitador: evita que la señal se "recorte" y distorsione si el
+// volumen del mic (que ahora puede subirse por encima de 100%) o la
+// suma de varios sonidos a la vez empuja el nivel demasiado alto.
+const masterLimiter = audioCtx.createDynamicsCompressor();
+masterLimiter.threshold.value = -6;
+masterLimiter.knee.value = 0;
+masterLimiter.ratio.value = 20;
+masterLimiter.attack.value = 0.003;
+masterLimiter.release.value = 0.1;
+masterLimiter.connect(mixDestination);
+
 const mixOutputEl = new Audio();
 mixOutputEl.srcObject = mixDestination.stream;
 // Importante: NO arrancamos la reproducción acá todavía. Si empezamos a
@@ -28,7 +39,7 @@ mixOutputEl.srcObject = mixDestination.stream;
 function connectSoundToMix(audio) {
   try {
     const node = audioCtx.createMediaElementSource(audio);
-    node.connect(mixDestination);
+    node.connect(masterLimiter);
   } catch (err) {
     console.error('No se pudo conectar el sonido a la mezcla:', err);
   }
@@ -495,7 +506,7 @@ const micDeviceSelect = document.getElementById('mic-device-select');
 const micVolumeSlider = document.getElementById('mic-volume');
 
 const micGainNode = audioCtx.createGain();
-micGainNode.connect(mixDestination);
+micGainNode.connect(masterLimiter);
 
 // Medidor visual: tapea la señal del micrófono (después del volumen)
 // para mostrar si realmente está entrando audio, sin depender de mirar
