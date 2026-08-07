@@ -5,19 +5,9 @@ const emptyMsg = document.getElementById('empty-msg');
 const stopAllBtn = document.getElementById('stop-all-btn');
 
 // --- Motor de mezcla (reemplaza a VoiceMeeter) ---
-// Todo lo que suena (efectos + opcionalmente el micrófono) se conecta a
-// este único "destino" de Web Audio. El resultado combinado se manda a
-// un <audio> oculto cuyo dispositivo de salida elegimos (CABLE Input).
-// latencyHint: 'playback' prioriza buffers más grandes (más estables,
-// menos propensos a cortes/glitches) en vez de la mínima latencia
-// posible. Para un soundboard, unos milisegundos extra no se notan;
-// un corte o distorsión en el audio sí.
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback' });
 const mixDestination = audioCtx.createMediaStreamDestination();
 
-// Limitador: evita que la señal se "recorte" y distorsione si el
-// volumen del mic (que ahora puede subirse por encima de 100%) o la
-// suma de varios sonidos a la vez empuja el nivel demasiado alto.
 const masterLimiter = audioCtx.createDynamicsCompressor();
 masterLimiter.threshold.value = -6;
 masterLimiter.knee.value = 0;
@@ -26,16 +16,14 @@ masterLimiter.attack.value = 0.003;
 masterLimiter.release.value = 0.1;
 masterLimiter.connect(mixDestination);
 
+// Analizador solo para el mini-visualizador (no afecta el audio real).
+const vizAnalyser = audioCtx.createAnalyser();
+vizAnalyser.fftSize = 64;
+masterLimiter.connect(vizAnalyser);
+
 const mixOutputEl = new Audio();
 mixOutputEl.srcObject = mixDestination.stream;
-// Importante: NO arrancamos la reproducción acá todavía. Si empezamos a
-// sonar antes de aplicar el dispositivo de salida (CABLE Input), puede
-// quedar sonando por los parlantes por defecto. Arranca recién después
-// de aplicar el sinkId, más abajo en loadOutputDevices().
 
-// Conecta un <audio> de un sonido al grafo de mezcla. Solo se puede
-// llamar una vez por elemento (por eso loadSounds() recrea los <audio>
-// cada vez que recarga la lista, en vez de reutilizarlos).
 function connectSoundToMix(audio) {
   try {
     const node = audioCtx.createMediaElementSource(audio);
@@ -45,7 +33,7 @@ function connectSoundToMix(audio) {
   }
 }
 
-// id ("categoría/nombre") -> { audio, config, btn, hotkeyLabel, id, name, category }
+// id -> { audio, config, wrapper, playBtn, starBtn, hotkeyLabel, colorBar, id, name, category }
 const sounds = new Map();
 
 function stopSound(id) {
@@ -62,7 +50,6 @@ function playSound(id) {
   const entry = sounds.get(id);
   if (!entry) return;
   if (audioCtx.state === 'suspended') audioCtx.resume();
-  // Volumen final = volumen individual del botón × volumen maestro.
   entry.audio.volume = entry.config.volume * masterVolume;
   entry.audio.muted = allMuted;
   entry.audio.loop = entry.config.loop;
@@ -74,7 +61,49 @@ stopAllBtn.addEventListener('click', () => {
   sounds.forEach((entry) => stopSound(entry.id));
 });
 
-// --- Panel de configuración por sonido ---
+// --- Mini reproductor / "sonando ahora" con visualizador ---
+const nowPlayingBar = document.getElementById('now-playing-bar');
+const nowPlayingName = document.getElementById('now-playing-name');
+const nowPlayingStopBtn = document.getElementById('now-playing-stop-btn');
+let currentlyPlayingId = null;
+
+function updateNowPlayingBar() {
+  if (currentlyPlayingId) {
+    const entry = sounds.get(currentlyPlayingId);
+    nowPlayingBar.style.display = 'flex';
+    nowPlayingName.textContent = entry ? entry.name : '';
+  } else {
+    nowPlayingBar.style.display = 'none';
+  }
+}
+
+nowPlayingStopBtn.addEventListener('click', () => {
+  if (currentlyPlayingId) stopSound(currentlyPlayingId);
+});
+
+const vizCanvas = document.createElement('canvas');
+vizCanvas.width = 120;
+vizCanvas.height = 24;
+vizCanvas.className = 'now-playing-viz';
+nowPlayingBar.insertBefore(vizCanvas, nowPlayingStopBtn);
+const vizCtx2d = vizCanvas.getContext('2d');
+const vizData = new Uint8Array(vizAnalyser.frequencyBinCount);
+
+function drawViz() {
+  requestAnimationFrame(drawViz);
+  if (!currentlyPlayingId) return;
+  vizAnalyser.getByteFrequencyData(vizData);
+  vizCtx2d.clearRect(0, 0, vizCanvas.width, vizCanvas.height);
+  const barWidth = vizCanvas.width / vizData.length;
+  for (let i = 0; i < vizData.length; i++) {
+    const h = (vizData[i] / 255) * vizCanvas.height;
+    vizCtx2d.fillStyle = getComputedStyle(document.body).getPropertyValue('--accent') || '#007acc';
+    vizCtx2d.fillRect(i * barWidth, vizCanvas.height - h, barWidth - 1, h);
+  }
+}
+drawViz();
+
+// --- Panel de configuración (popover por sonido) ---
 let openPopover = null;
 
 function closePopover() {
@@ -84,16 +113,19 @@ function closePopover() {
   }
 }
 
-function applyButtonStyle(name) {
-  const entry = sounds.get(name);
-  entry.btn.style.background = entry.config.color;
+function applyButtonStyle(id) {
+  const entry = sounds.get(id);
+  entry.playBtn.style.background = entry.config.color;
+  entry.colorBar.style.background = entry.config.color;
   entry.hotkeyLabel.textContent = entry.config.hotkey || '';
+  entry.starBtn.textContent = entry.config.favorite ? '★' : '☆';
+  entry.starBtn.classList.toggle('active', !!entry.config.favorite);
 }
 
-function openConfigPopover(name, anchorBtn) {
+function openConfigPopover(id, anchorBtn) {
   closePopover();
 
-  const entry = sounds.get(name);
+  const entry = sounds.get(id);
   const config = entry.config;
 
   const pop = document.createElement('div');
@@ -132,10 +164,6 @@ function openConfigPopover(name, anchorBtn) {
   const colorConfirmedLabel = pop.querySelector('#cfg-color-confirmed');
 
   pop.querySelector('#cfg-color-confirm').addEventListener('click', () => {
-    // No hace nada "mágico": el valor del color ya está tomado en
-    // colorInput.value en todo momento. Esto solo le da al usuario una
-    // confirmación visual clara de que puede pasar a "Guardar" sin
-    // preocuparse por el selector nativo de color.
     colorInput.blur();
     colorConfirmedLabel.style.display = 'inline';
     setTimeout(() => { colorConfirmedLabel.style.display = 'none'; }, 1500);
@@ -165,10 +193,10 @@ function openConfigPopover(name, anchorBtn) {
     const sure = confirm(`¿Eliminar "${entry.name}" definitivamente?\n\nEsto borra el archivo de audio y su configuración. No se puede deshacer.`);
     if (!sure) return;
 
-    const result = await window.sb.deleteSound(name);
+    const result = await window.sb.deleteSound(id);
     if (result.ok) {
       closePopover();
-      await loadSounds();
+      await loadSounds(true);
     } else {
       alert('No se pudo eliminar: ' + (result.error || 'error desconocido'));
     }
@@ -176,19 +204,18 @@ function openConfigPopover(name, anchorBtn) {
 
   pop.querySelector('#cfg-save').addEventListener('click', async () => {
     const newConfig = {
+      ...entry.config,
       color: pop.querySelector('#cfg-color').value,
       volume: parseFloat(pop.querySelector('#cfg-volume').value),
       hotkey: capturedHotkey,
       loop: pop.querySelector('#cfg-loop').checked
     };
-    const result = await window.sb.saveConfig(name, newConfig);
+    const result = await window.sb.saveConfig(id, newConfig);
     entry.config = newConfig;
-    applyButtonStyle(name);
+    applyButtonStyle(id);
 
     const warning = pop.querySelector('#cfg-hotkey-warning');
     if (result && result.hotkeyRegistered === false) {
-      // El atajo quedó guardado pero no se pudo activar globalmente:
-      // avisamos y dejamos el panel abierto para que prueben otra combinación.
       warning.style.display = 'block';
     } else {
       closePopover();
@@ -204,193 +231,17 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// --- Carga inicial de sonidos ---
-const categoryTabs = document.getElementById('category-tabs');
-let activeCategory = 'Todos';
-
-function renderCategoryTabs(categories) {
-  categoryTabs.innerHTML = '';
-
-  if (categories.length <= 1) {
-    // Con una sola categoría (o ninguna) no tiene sentido mostrar pestañas.
-    categoryTabs.style.display = 'none';
-    return;
-  }
-
-  categoryTabs.style.display = 'flex';
-  const allTabs = ['Todos', ...categories];
-
-  allTabs.forEach((cat) => {
-    const tab = document.createElement('button');
-    tab.className = 'category-tab' + (cat === activeCategory ? ' active' : '');
-    tab.textContent = cat;
-    tab.addEventListener('click', () => {
-      activeCategory = cat;
-      renderCategoryTabs(categories);
-      applyCategoryFilter();
-    });
-    categoryTabs.appendChild(tab);
-  });
-}
-
-function applyCategoryFilter() {
-  sounds.forEach((entry) => {
-    const visible = activeCategory === 'Todos' || entry.category === activeCategory;
-    entry.wrapper.style.display = visible ? '' : 'none';
-  });
-}
-
-async function loadSounds() {
-  const soundFiles = await window.sb.listSounds();
-
-  if (soundFiles.length === 0) {
-    emptyMsg.style.display = 'block';
-    grid.style.display = 'none';
-    categoryTabs.style.display = 'none';
-    return;
-  }
-
-  emptyMsg.style.display = 'none';
-  grid.style.display = 'grid';
-  grid.innerHTML = '';
-  sounds.clear();
-
-  const categories = [...new Set(soundFiles.map((s) => s.category))];
-  renderCategoryTabs(categories);
-
-  for (const sound of soundFiles) {
-    const config = await window.sb.getConfig(sound.id);
-    const audio = new Audio(sound.path);
-    connectSoundToMix(audio);
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'sound-btn-wrapper';
-
-    const btn = document.createElement('button');
-    btn.className = 'sound-btn';
-    btn.textContent = sound.name;
-
-    const gear = document.createElement('button');
-    gear.className = 'cfg-gear';
-    gear.textContent = '⚙';
-    gear.title = 'Configurar';
-
-    const hotkeyLabel = document.createElement('span');
-    hotkeyLabel.className = 'hotkey-label';
-
-    wrapper.appendChild(btn);
-    wrapper.appendChild(gear);
-    wrapper.appendChild(hotkeyLabel);
-    grid.appendChild(wrapper);
-
-    sounds.set(sound.id, {
-      audio, config, btn, hotkeyLabel, wrapper,
-      id: sound.id, name: sound.name, category: sound.category
-    });
-
-    audio.addEventListener('play', () => btn.classList.add('playing'));
-    audio.addEventListener('pause', () => btn.classList.remove('playing'));
-    audio.addEventListener('ended', () => btn.classList.remove('playing'));
-
-    // Un clic: si está sonando, lo para. Si no, lo reproduce.
-    btn.addEventListener('click', () => {
-      if (audio.paused) {
-        playSound(sound.id);
-      } else {
-        stopSound(sound.id);
-      }
-    });
-
-    gear.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openConfigPopover(sound.id, gear);
-    });
-
-    // Clic derecho sobre el botón también abre la configuración,
-    // como acceso rápido sin tener que apuntarle al ⚙.
-    btn.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      openConfigPopover(sound.id, btn);
-    });
-
-    applyButtonStyle(sound.id);
-  }
-
-  applyCategoryFilter();
-}
-
-// --- Agregar sonidos nuevos desde la app ---
-const addSoundBtn = document.getElementById('add-sound-btn');
-
-// Electron no soporta window.prompt() (solo alert/confirm tienen
-// equivalente nativo), así que armamos un modal propio para pedir
-// el nombre de categoría. Devuelve el texto ingresado, o null si
-// cancelan.
-function askCategoryName() {
-  return new Promise((resolve) => {
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    overlay.innerHTML = `
-      <div class="modal-box">
-        <p>Nombre de la categoría (carpeta) para estos sonidos.<br>
-        Dejalo vacío para agregarlos sin categoría (General).</p>
-        <input type="text" id="category-name-input" placeholder="Ej: Memes">
-        <div class="modal-actions">
-          <button id="category-cancel-btn" type="button">Cancelar</button>
-          <button id="category-accept-btn" type="button">Aceptar</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-
-    const input = overlay.querySelector('#category-name-input');
-    input.focus();
-
-    function finish(value) {
-      overlay.remove();
-      resolve(value);
-    }
-
-    overlay.querySelector('#category-cancel-btn').addEventListener('click', () => finish(null));
-    overlay.querySelector('#category-accept-btn').addEventListener('click', () => finish(input.value));
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') finish(input.value);
-      if (e.key === 'Escape') finish(null);
-    });
-  });
-}
-
-addSoundBtn.addEventListener('click', async () => {
-  const category = await askCategoryName();
-
-  // Si cancela, category viene null: no hacemos nada.
-  if (category === null) return;
-
-  const result = await window.sb.addSounds(category.trim() || 'General');
-  if (result.canceled) return;
-
-  if (result.ok) {
-    await loadSounds();
-  } else {
-    alert('No se pudieron agregar los sonidos: ' + (result.error || 'error desconocido'));
-  }
-});
-
-// Cuando el proceso principal detecta un atajo global, hacemos lo mismo
-// que si hubieran hecho clic en el botón.
-window.sb.onHotkeyTrigger((name) => {
-  const entry = sounds.get(name);
+window.sb.onHotkeyTrigger((id) => {
+  const entry = sounds.get(id);
   if (!entry) return;
   if (entry.audio.paused) {
-    playSound(name);
+    playSound(id);
   } else {
-    stopSound(name);
+    stopSound(id);
   }
 });
 
-loadSounds();
-
-// --- Estado del micrófono virtual (VB-CABLE) ---
+// --- VB-CABLE: detección ---
 const vbBanner = document.getElementById('vbcable-banner');
 const vbText = document.getElementById('vbcable-text');
 const vbDownloadBtn = document.getElementById('vbcable-download-btn');
@@ -398,14 +249,11 @@ const vbRecheckBtn = document.getElementById('vbcable-recheck-btn');
 
 async function checkVBCable() {
   const result = await window.sb.checkVBCable();
-
   if (!result.supported) {
     vbBanner.style.display = 'none';
     return;
   }
-
   vbBanner.style.display = 'flex';
-
   if (result.installed) {
     vbBanner.className = 'vbcable-banner ok';
     vbText.textContent = '✅ Micrófono virtual (VB-CABLE) detectado.';
@@ -419,17 +267,11 @@ async function checkVBCable() {
   }
 }
 
-vbDownloadBtn.addEventListener('click', () => {
-  window.sb.openVBCableDownload();
-});
-
-vbRecheckBtn.addEventListener('click', () => {
-  checkVBCable();
-});
-
+vbDownloadBtn.addEventListener('click', () => window.sb.openVBCableDownload());
+vbRecheckBtn.addEventListener('click', () => checkVBCable());
 checkVBCable();
 
-// --- Selector de dispositivo de salida (se aplica a la MEZCLA completa) ---
+// --- Selector de dispositivo de salida (aplica a la MEZCLA completa) ---
 const outputSelect = document.getElementById('output-device-select');
 let currentOutputDeviceId = '';
 
@@ -451,15 +293,11 @@ let allInputDevices = [];
 
 async function refreshDeviceLists() {
   try {
-    // Pedimos permiso de audio una sola vez para poder ver los nombres
-    // reales de los dispositivos. No grabamos ni usamos este stream de
-    // prueba: es solo para desbloquear las etiquetas.
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     stream.getTracks().forEach((track) => track.stop());
   } catch (err) {
     console.error('No se pudo pedir permiso de audio:', err);
   }
-
   const devices = await navigator.mediaDevices.enumerateDevices();
   allOutputDevices = devices.filter((d) => d.kind === 'audiooutput');
   allInputDevices = devices.filter((d) => d.kind === 'audioinput');
@@ -467,7 +305,6 @@ async function refreshDeviceLists() {
 
 async function loadOutputDevices() {
   await refreshDeviceLists();
-
   currentOutputDeviceId = await window.sb.getOutputDevice();
 
   outputSelect.innerHTML = '';
@@ -486,9 +323,6 @@ async function loadOutputDevices() {
   }
 
   await applyOutputDevice();
-
-  // Recién ahora arrancamos a reproducir la mezcla, ya con el
-  // dispositivo de salida correcto aplicado.
   mixOutputEl.play().catch((err) => console.error('[mezcla] No se pudo iniciar la reproducción:', err));
 }
 
@@ -500,17 +334,15 @@ outputSelect.addEventListener('change', async () => {
 
 loadOutputDevices();
 
-// --- Micrófono: capturarlo y mezclarlo con los efectos (reemplaza a VoiceMeeter) ---
+// --- Micrófono ---
 const micEnabledCheckbox = document.getElementById('mic-enabled');
 const micDeviceSelect = document.getElementById('mic-device-select');
 const micVolumeSlider = document.getElementById('mic-volume');
+const micVolumeValue = document.getElementById('mic-volume-value');
 
 const micGainNode = audioCtx.createGain();
 micGainNode.connect(masterLimiter);
 
-// Medidor visual: tapea la señal del micrófono (después del volumen)
-// para mostrar si realmente está entrando audio, sin depender de mirar
-// otra app externa.
 const micAnalyser = audioCtx.createAnalyser();
 micAnalyser.fftSize = 256;
 micGainNode.connect(micAnalyser);
@@ -539,10 +371,6 @@ async function startMic(deviceId) {
     micStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         deviceId: deviceId ? { exact: deviceId } : undefined,
-        // Desactivado a propósito: estos procesamientos están pensados
-        // para un micrófono acústico común, y pueden distorsionar una
-        // señal que ya viene procesada (como la de WO Mic, que llega
-        // por red desde el celular).
         echoCancellation: false,
         noiseSuppression: false,
         autoGainControl: false
@@ -600,30 +428,24 @@ micEnabledCheckbox.addEventListener('change', async () => {
 });
 
 micDeviceSelect.addEventListener('change', async () => {
-  if (micEnabledCheckbox.checked) {
-    await startMic(micDeviceSelect.value);
-  }
+  if (micEnabledCheckbox.checked) await startMic(micDeviceSelect.value);
   saveMicSettings();
 });
 
 micVolumeSlider.addEventListener('input', () => {
   micGainNode.gain.value = parseFloat(micVolumeSlider.value);
+  micVolumeValue.textContent = Math.round(parseFloat(micVolumeSlider.value) * 100) + '%';
 });
 
-micVolumeSlider.addEventListener('change', () => {
-  saveMicSettings();
-});
+micVolumeSlider.addEventListener('change', () => saveMicSettings());
 
 async function loadMicSettings() {
-  // Si todavía no se cargó la lista de dispositivos (puede pasar si esto
-  // corre antes de que termine loadOutputDevices), la pedimos acá.
-  if (allInputDevices.length === 0) {
-    await refreshDeviceLists();
-  }
+  if (allInputDevices.length === 0) await refreshDeviceLists();
 
   const mic = await window.sb.getMic();
   populateMicDeviceSelect(mic.deviceId);
   micVolumeSlider.value = mic.volume;
+  micVolumeValue.textContent = Math.round(mic.volume * 100) + '%';
   micGainNode.gain.value = mic.volume;
   micEnabledCheckbox.checked = mic.enabled;
 
@@ -635,12 +457,10 @@ async function loadMicSettings() {
 
 loadMicSettings();
 
-// --- Mezclador interno: volumen maestro y mute general ---
+// --- Mezclador: volumen maestro y mute general ---
 const masterVolumeSlider = document.getElementById('master-volume');
 const muteAllBtn = document.getElementById('mute-all-btn');
 
-// Aplica el estado actual (volumen maestro + mute) a todo lo que esté
-// sonando en este momento, no solo a lo próximo que se reproduzca.
 function applyMixerToPlaying() {
   sounds.forEach((entry) => {
     entry.audio.volume = entry.config.volume * masterVolume;
@@ -661,10 +481,7 @@ masterVolumeSlider.addEventListener('input', () => {
   masterVolume = parseFloat(masterVolumeSlider.value);
   applyMixerToPlaying();
 });
-
-masterVolumeSlider.addEventListener('change', () => {
-  saveMixer();
-});
+masterVolumeSlider.addEventListener('change', () => saveMixer());
 
 muteAllBtn.addEventListener('click', () => {
   allMuted = !allMuted;
@@ -704,10 +521,8 @@ importBtn.addEventListener('click', async () => {
     'Cancelar = Fusionar (agregar/actualizar sin borrar lo que ya tenés)'
   );
   const mode = replace ? 'replace' : 'merge';
-
   const result = await window.sb.importLibrary(mode);
   if (result.canceled) return;
-
   if (result.ok) {
     alert('Biblioteca importada correctamente. La app se va a recargar.');
     location.reload();
@@ -715,3 +530,350 @@ importBtn.addEventListener('click', async () => {
     alert('No se pudo importar: ' + (result.error || 'error desconocido'));
   }
 });
+
+// --- Panel de configuración (salida, mic, VB-CABLE) ---
+const settingsBtn = document.getElementById('settings-btn');
+const settingsPanel = document.getElementById('settings-panel');
+
+settingsBtn.addEventListener('click', () => {
+  const isOpen = settingsPanel.style.display !== 'none';
+  settingsPanel.style.display = isOpen ? 'none' : 'flex';
+});
+
+// --- Tema: oscuro (por defecto) o morado ---
+const themeCheckbox = document.getElementById('theme-toggle-checkbox');
+
+themeCheckbox.addEventListener('change', async () => {
+  const theme = themeCheckbox.checked ? 'purple' : 'dark';
+  document.body.classList.toggle('theme-purple', theme === 'purple');
+  await window.sb.saveTheme(theme);
+});
+
+async function loadTheme() {
+  const theme = await window.sb.getTheme();
+  themeCheckbox.checked = theme === 'purple';
+  document.body.classList.toggle('theme-purple', theme === 'purple');
+}
+
+loadTheme();
+
+// --- Carga de sonidos: carpetas + vista de lista (todos/favoritos/categoría) ---
+const folderView = document.getElementById('folder-view');
+const backToFoldersBtn = document.getElementById('back-to-folders-btn');
+const viewAllBtn = document.getElementById('view-all-btn');
+const viewFavoritesBtn = document.getElementById('view-favorites-btn');
+const searchInput = document.getElementById('search-input');
+const sortSelect = document.getElementById('sort-select');
+
+let currentCategories = [];
+let activeCategory = null;
+let listFilter = { type: 'folders' };
+
+function renderFolders() {
+  folderView.innerHTML = '';
+  currentCategories.forEach((cat) => {
+    const tile = document.createElement('button');
+    tile.className = 'folder-tile';
+    tile.innerHTML = `<div class="folder-icon">📁</div><div class="folder-name">${cat}</div>`;
+    tile.addEventListener('click', () => {
+      activeCategory = cat;
+      showListView({ type: 'category', value: cat });
+    });
+    folderView.appendChild(tile);
+  });
+}
+
+function showFoldersView() {
+  listFilter = { type: 'folders' };
+  activeCategory = null;
+  folderView.style.display = 'grid';
+  grid.style.display = 'none';
+  backToFoldersBtn.style.display = 'none';
+  renderFolders();
+}
+
+function showListView(filter) {
+  listFilter = filter;
+  folderView.style.display = 'none';
+  grid.style.display = 'grid';
+  backToFoldersBtn.style.display = currentCategories.length > 1 ? 'inline-block' : 'none';
+  applyFilters();
+}
+
+function applyFilters() {
+  const search = searchInput.value.trim().toLowerCase();
+  const visible = [];
+
+  sounds.forEach((entry) => {
+    let matches = true;
+    if (listFilter.type === 'category') matches = entry.category === listFilter.value;
+    else if (listFilter.type === 'favorites') matches = !!entry.config.favorite;
+    // 'all' o 'folders' (cuando solo hay 1 categoría): no filtra por categoría.
+
+    if (matches && search) {
+      matches = entry.name.toLowerCase().includes(search);
+    }
+
+    entry.wrapper.style.display = matches ? '' : 'none';
+    if (matches) visible.push(entry);
+  });
+
+  const sortValue = sortSelect.value;
+  visible.sort((a, b) => sortValue === 'name-desc' ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name));
+  visible.forEach((entry) => grid.appendChild(entry.wrapper));
+}
+
+backToFoldersBtn.addEventListener('click', showFoldersView);
+viewAllBtn.addEventListener('click', () => { activeCategory = null; showListView({ type: 'all' }); });
+viewFavoritesBtn.addEventListener('click', () => { activeCategory = null; showListView({ type: 'favorites' }); });
+searchInput.addEventListener('input', () => { if (listFilter.type !== 'folders') applyFilters(); });
+sortSelect.addEventListener('change', () => { if (listFilter.type !== 'folders') applyFilters(); });
+
+async function toggleFavorite(id, entry) {
+  const isFav = await window.sb.toggleFavorite(id);
+  entry.config.favorite = isFav;
+  entry.starBtn.textContent = isFav ? '★' : '☆';
+  entry.starBtn.classList.toggle('active', isFav);
+  if (listFilter.type === 'favorites') applyFilters();
+}
+
+async function loadSounds(preserveView) {
+  const previousFilter = preserveView ? listFilter : null;
+  const soundFiles = await window.sb.listSounds();
+
+  if (soundFiles.length === 0) {
+    emptyMsg.style.display = 'block';
+    grid.style.display = 'none';
+    folderView.style.display = 'none';
+    backToFoldersBtn.style.display = 'none';
+    return;
+  }
+
+  emptyMsg.style.display = 'none';
+  grid.innerHTML = '';
+  sounds.clear();
+
+  currentCategories = [...new Set(soundFiles.map((s) => s.category))];
+
+  for (const sound of soundFiles) {
+    const config = await window.sb.getConfig(sound.id);
+    const audio = new Audio(sound.path);
+    connectSoundToMix(audio);
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'sound-card';
+
+    const starBtn = document.createElement('button');
+    starBtn.className = 'star-btn';
+    starBtn.title = 'Favorito';
+
+    const gear = document.createElement('button');
+    gear.className = 'cfg-gear';
+    gear.textContent = '⚙';
+    gear.title = 'Configurar';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'sound-name';
+    nameEl.textContent = sound.name;
+
+    const playBtn = document.createElement('button');
+    playBtn.className = 'sound-play-btn';
+    playBtn.textContent = '▶';
+
+    const colorBar = document.createElement('div');
+    colorBar.className = 'sound-color-bar';
+
+    const hotkeyLabel = document.createElement('span');
+    hotkeyLabel.className = 'hotkey-label';
+
+    wrapper.appendChild(starBtn);
+    wrapper.appendChild(gear);
+    wrapper.appendChild(nameEl);
+    wrapper.appendChild(playBtn);
+    wrapper.appendChild(hotkeyLabel);
+    wrapper.appendChild(colorBar);
+    grid.appendChild(wrapper);
+
+    const entry = {
+      audio, config, wrapper, playBtn, starBtn, hotkeyLabel, colorBar,
+      id: sound.id, name: sound.name, category: sound.category
+    };
+    sounds.set(sound.id, entry);
+
+    audio.addEventListener('play', () => {
+      wrapper.classList.add('playing');
+      playBtn.textContent = '⏸';
+      currentlyPlayingId = sound.id;
+      updateNowPlayingBar();
+    });
+    audio.addEventListener('pause', () => {
+      wrapper.classList.remove('playing');
+      playBtn.textContent = '▶';
+      if (currentlyPlayingId === sound.id) {
+        currentlyPlayingId = null;
+        updateNowPlayingBar();
+      }
+    });
+    audio.addEventListener('ended', () => {
+      wrapper.classList.remove('playing');
+      playBtn.textContent = '▶';
+      if (currentlyPlayingId === sound.id) {
+        currentlyPlayingId = null;
+        updateNowPlayingBar();
+      }
+    });
+
+    wrapper.addEventListener('click', (e) => {
+      if (e.target === starBtn || e.target === gear) return;
+      if (audio.paused) playSound(sound.id); else stopSound(sound.id);
+    });
+
+    gear.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openConfigPopover(sound.id, gear);
+    });
+
+    wrapper.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      openConfigPopover(sound.id, gear);
+    });
+
+    starBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleFavorite(sound.id, entry);
+    });
+
+    applyButtonStyle(sound.id);
+  }
+
+  if (currentCategories.length <= 1) {
+    activeCategory = null;
+    folderView.style.display = 'none';
+    backToFoldersBtn.style.display = 'none';
+    grid.style.display = 'grid';
+    listFilter = { type: 'all' };
+    applyFilters();
+  } else if (previousFilter && previousFilter.type === 'category' && currentCategories.includes(previousFilter.value)) {
+    showListView(previousFilter);
+  } else if (previousFilter && (previousFilter.type === 'all' || previousFilter.type === 'favorites')) {
+    showListView(previousFilter);
+  } else {
+    showFoldersView();
+  }
+}
+
+// --- Agregar sonidos nuevos ---
+const addSoundBtn = document.getElementById('add-sound-btn');
+
+function askCategoryFlow() {
+  return new Promise((resolve) => {
+    document.querySelectorAll('.modal-overlay').forEach((el) => el.remove());
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    document.body.appendChild(overlay);
+
+    const existingFolders = currentCategories.filter((c) => c !== 'General');
+
+    function finish(value) {
+      overlay.remove();
+      resolve(value);
+    }
+
+    function renderChoice() {
+      overlay.innerHTML = `
+        <div class="modal-box">
+          <p>¿Dónde agregás estos sonidos?</p>
+          <div class="modal-actions modal-actions-column">
+            <button id="choice-general" type="button">Sin categoría (General)</button>
+            ${existingFolders.length ? '<button id="choice-existing" type="button">Carpeta existente</button>' : ''}
+            <button id="choice-new" type="button">Nueva carpeta</button>
+            <button id="choice-cancel" type="button">Cancelar</button>
+          </div>
+        </div>
+      `;
+      overlay.querySelector('#choice-general').addEventListener('click', () => finish('General'));
+      const existingBtn = overlay.querySelector('#choice-existing');
+      if (existingBtn) existingBtn.addEventListener('click', renderExistingPicker);
+      overlay.querySelector('#choice-new').addEventListener('click', renderNewFolder);
+      overlay.querySelector('#choice-cancel').addEventListener('click', () => finish(null));
+    }
+
+    function renderExistingPicker() {
+      overlay.innerHTML = `
+        <div class="modal-box">
+          <p>Elegí la carpeta:</p>
+          <select id="existing-folder-select">
+            ${existingFolders.map((c) => `<option value="${c}">${c}</option>`).join('')}
+          </select>
+          <div class="modal-actions">
+            <button id="existing-back-btn" type="button">Atrás</button>
+            <button id="existing-accept-btn" type="button">Aceptar</button>
+          </div>
+        </div>
+      `;
+      overlay.querySelector('#existing-back-btn').addEventListener('click', renderChoice);
+      overlay.querySelector('#existing-accept-btn').addEventListener('click', () => {
+        finish(overlay.querySelector('#existing-folder-select').value);
+      });
+    }
+
+    function renderNewFolder() {
+      overlay.innerHTML = `
+        <div class="modal-box">
+          <p>Nombre de la nueva carpeta:</p>
+          <input type="text" id="new-folder-input" placeholder="Ej: Memes">
+          <p class="hotkey-warning" id="new-folder-error" style="display:none;">⚠ Ya existe una carpeta con ese nombre.</p>
+          <div class="modal-actions">
+            <button id="new-back-btn" type="button">Atrás</button>
+            <button id="new-accept-btn" type="button">Aceptar</button>
+          </div>
+        </div>
+      `;
+      const input = overlay.querySelector('#new-folder-input');
+      setTimeout(() => input.focus(), 0);
+      const errorMsg = overlay.querySelector('#new-folder-error');
+
+      function tryAccept() {
+        const name = input.value.trim();
+        if (!name) return;
+        const exists = currentCategories.some((c) => c.toLowerCase() === name.toLowerCase());
+        if (exists) {
+          errorMsg.style.display = 'block';
+          return;
+        }
+        finish(name);
+      }
+
+      overlay.querySelector('#new-back-btn').addEventListener('click', renderChoice);
+      overlay.querySelector('#new-accept-btn').addEventListener('click', tryAccept);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') tryAccept();
+        if (e.key === 'Escape') finish(null);
+      });
+    }
+
+    renderChoice();
+  });
+}
+
+addSoundBtn.addEventListener('click', async () => {
+  addSoundBtn.disabled = true;
+  try {
+    const category = await askCategoryFlow();
+    if (category === null) return;
+
+    const result = await window.sb.addSounds(category);
+    if (result.canceled) return;
+
+    if (result.ok) {
+      await loadSounds(true);
+    } else {
+      alert('No se pudieron agregar los sonidos: ' + (result.error || 'error desconocido'));
+    }
+  } finally {
+    addSoundBtn.disabled = false;
+  }
+});
+
+loadSounds();

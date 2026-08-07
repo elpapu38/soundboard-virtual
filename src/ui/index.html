@@ -9,7 +9,6 @@
   <header>
     <h1>🎵 SoundBoard Virtual</h1>
     <div class="header-actions">
-      <select id="output-device-select" title="Dispositivo de salida de audio"></select>
       <label class="master-volume">
         🔊 <input type="range" id="master-volume" min="0" max="1" step="0.05" value="1">
       </label>
@@ -17,39 +16,73 @@
       <button id="stop-all-btn" title="Detener todos los sonidos">⏹ Detener todo</button>
       <button id="export-btn" title="Exportar biblioteca">📤 Exportar</button>
       <button id="import-btn" title="Importar biblioteca">📥 Importar</button>
+      <button id="settings-btn" title="Configuración de audio">⚙ Configuración</button>
+      <label class="theme-toggle" title="Cambiar tema">
+        <input type="checkbox" id="theme-toggle-checkbox">
+        🎨 Morado
+      </label>
       <span id="version"></span>
     </div>
   </header>
 
-  <div class="mic-row">
-    <label class="mic-toggle">
-      <input type="checkbox" id="mic-enabled">
-      🎙️ Mezclar micrófono con los efectos
-    </label>
-    <select id="mic-device-select" title="Dispositivo de micrófono"></select>
-    <label class="mic-volume-label">
-      Vol. mic 🔊 <input type="range" id="mic-volume" min="0" max="3" step="0.1" value="1.5">
-    </label>
-    <div class="mic-meter" title="Nivel de micrófono captado">
-      <div class="mic-meter-fill" id="mic-meter-fill"></div>
+  <div id="settings-panel" class="settings-panel" style="display:none;">
+    <div class="settings-section">
+      <h3>Salida de audio</h3>
+      <select id="output-device-select" title="Dispositivo de salida de audio"></select>
     </div>
-  </div>
 
-  <div id="vbcable-banner" class="vbcable-banner" style="display:none;">
-    <span id="vbcable-text"></span>
-    <div class="vbcable-actions">
-      <button id="vbcable-download-btn" style="display:none;">Descargar VB-CABLE</button>
-      <button id="vbcable-recheck-btn">Volver a comprobar</button>
+    <div class="settings-section">
+      <h3>Micrófono</h3>
+      <div class="mic-row">
+        <label class="mic-toggle">
+          <input type="checkbox" id="mic-enabled">
+          🎙️ Mezclar micrófono con los efectos
+        </label>
+        <select id="mic-device-select" title="Dispositivo de micrófono"></select>
+        <label class="mic-volume-label">
+          Vol. mic 🔊 <input type="range" id="mic-volume" min="0" max="3" step="0.1" value="1.5">
+          <span id="mic-volume-value">150%</span>
+        </label>
+        <div class="mic-meter" title="Nivel de micrófono captado">
+          <div class="mic-meter-fill" id="mic-meter-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Driver de micrófono virtual</h3>
+      <div id="vbcable-banner" class="vbcable-banner" style="display:none;">
+        <span id="vbcable-text"></span>
+        <div class="vbcable-actions">
+          <button id="vbcable-download-btn" style="display:none;">Descargar VB-CABLE</button>
+          <button id="vbcable-recheck-btn">Volver a comprobar</button>
+        </div>
+      </div>
     </div>
   </div>
 
   <main>
     <p id="empty-msg">No se encontraron sonidos en <code>assets/sounds</code>. Agregá archivos .mp3, .wav, .ogg o .flac ahí (o en subcarpetas, para categorías) y reiniciá la app, o usá el botón de abajo.</p>
+
     <div class="toolbar">
       <button id="add-sound-btn">➕ Agregar sonido(s)</button>
+      <button id="back-to-folders-btn" style="display:none;">⬅ Volver a carpetas</button>
+      <button id="view-all-btn">🗂 Todos los sonidos</button>
+      <button id="view-favorites-btn">⭐ Favoritos</button>
+      <input type="text" id="search-input" placeholder="Buscar sonidos...">
+      <select id="sort-select">
+        <option value="name-asc">Nombre A-Z</option>
+        <option value="name-desc">Nombre Z-A</option>
+      </select>
     </div>
-    <div id="category-tabs" class="category-tabs"></div>
+
+    <div id="folder-view" class="folder-grid"></div>
     <div id="sound-grid" class="grid"></div>
+
+    <div id="now-playing-bar" class="now-playing-bar" style="display:none;">
+      <span id="now-playing-name"></span>
+      <button id="now-playing-stop-btn">⏹ Detener</button>
+    </div>
   </main>
 
   <script src="renderer.js"></script>

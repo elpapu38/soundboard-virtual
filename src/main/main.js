@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, globalShortcut, shell, dialog } = require('
 const path = require('path');
 const fs = require('fs');
 const { exec } = require('child_process');
+const { pathToFileURL } = require('url');
 const Store = require('electron-store');
 const AdmZip = require('adm-zip');
 const { autoUpdater } = require('electron-updater');
@@ -34,7 +35,7 @@ function listSoundFiles() {
       id,
       name,
       category,
-      path: 'file://' + filePath.replace(/\\/g, '/'),
+      path: pathToFileURL(filePath).href,
       fullPath: filePath
     });
   }
@@ -52,7 +53,7 @@ function listSoundFiles() {
 }
 
 function defaultConfig() {
-  return { color: '#2d2d30', volume: 1, hotkey: '', loop: false };
+  return { color: '#2d2d30', volume: 1, hotkey: '', loop: false, favorite: false };
 }
 
 // Consulta los dispositivos de audio de Windows vía PowerShell y busca
@@ -155,6 +156,17 @@ ipcMain.handle('settings:save-mixer', (event, mixer) => {
 ipcMain.handle('settings:get-mic', () => store.get('mic', { deviceId: '', enabled: false, volume: 1.5 }));
 ipcMain.handle('settings:save-mic', (event, mic) => {
   store.set('mic', mic);
+  return true;
+});
+ipcMain.handle('sounds:toggle-favorite', (event, id) => {
+  const config = store.get(id, defaultConfig());
+  config.favorite = !config.favorite;
+  store.set(id, config);
+  return config.favorite;
+});
+ipcMain.handle('settings:get-theme', () => store.get('theme', 'dark'));
+ipcMain.handle('settings:save-theme', (event, theme) => {
+  store.set('theme', theme);
   return true;
 });
 

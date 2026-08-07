@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('sb', {
-  version: () => '1.1.0',
+  version: () => '1.2.0',
   listSounds: () => ipcRenderer.invoke('sounds:list'),
   getConfig: (name) => ipcRenderer.invoke('config:get', name),
   saveConfig: (name, config) => ipcRenderer.invoke('config:save', name, config),
@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld('sb', {
   saveMixer: (mixer) => ipcRenderer.invoke('settings:save-mixer', mixer),
   getMic: () => ipcRenderer.invoke('settings:get-mic'),
   saveMic: (mic) => ipcRenderer.invoke('settings:save-mic', mic),
+  toggleFavorite: (id) => ipcRenderer.invoke('sounds:toggle-favorite', id),
+  getTheme: () => ipcRenderer.invoke('settings:get-theme'),
+  saveTheme: (theme) => ipcRenderer.invoke('settings:save-theme', theme),
   exportLibrary: () => ipcRenderer.invoke('library:export'),
   importLibrary: (mode) => ipcRenderer.invoke('library:import', mode)
 });
